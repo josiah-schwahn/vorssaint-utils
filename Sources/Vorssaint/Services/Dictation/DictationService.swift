@@ -532,6 +532,8 @@ private final class DictationHUD {
         hideWork?.cancel()
         hideWork = nil
         panel.setContentSize(NSSize(width: width, height: Self.height))
+        // The shadow is traced from the rounded content; retrace it at the new width.
+        panel.invalidateShadow()
         label.frame.size.width = width - 50
         position(panel)
         return panel
@@ -553,9 +555,9 @@ private final class DictationHUD {
         let background = NSVisualEffectView(frame: NSRect(origin: .zero, size: size))
         background.material = .hudWindow
         background.state = .active
-        background.wantsLayer = true
-        background.layer?.cornerRadius = size.height / 2
-        background.layer?.masksToBounds = true
+        // A layer corner radius leaves the blur's square corners showing as a
+        // pale box; a stretchable mask image rounds the blur itself.
+        background.maskImage = Self.pillMask(radius: size.height / 2)
         background.autoresizingMask = [.width, .height]
 
         // The icon area is larger than the dot so the ring and the swelling
@@ -588,6 +590,19 @@ private final class DictationHUD {
         background.addSubview(label)
         panel.contentView = background
         return panel
+    }
+
+    /// A capsule mask that keeps its round ends however wide the badge grows.
+    private static func pillMask(radius: CGFloat) -> NSImage {
+        let side = radius * 2 + 1
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
     }
 
     private func position(_ panel: NSPanel) {
