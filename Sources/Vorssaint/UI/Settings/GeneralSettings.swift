@@ -4,7 +4,7 @@
 import SwiftUI
 import ServiceManagement
 
-/// App-wide startup and appearance settings.
+/// App-wide startup and appearance settings, and hold-to-talk dictation.
 struct GeneralSettings: View {
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var appearance = AppAppearanceController.shared
@@ -17,10 +17,13 @@ struct GeneralSettings: View {
     @State private var loginPending = false
     @State private var loginRefreshID = UUID()
     @AppStorage(DefaultsKey.hotkeyEnabled) private var hotkeyEnabled = true
+    @AppStorage(DictationService.enabledKey) private var dictationEnabled = true
+    @State private var systemDictationOn = DictationService.isSystemDictationOn
 
     private var text: GeneralSettingsStrings { FeatureStrings.generalSettings(l10n.language) }
     private var appearanceStrings: AppearanceStrings { FeatureStrings.appearance(l10n.language) }
     private var feedbackStrings: FeedbackStrings { FeatureStrings.feedback(l10n.language) }
+    private var dictationStrings: DictationStrings { FeatureStrings.dictation(l10n.language) }
 
     var body: some View {
         ScrollView {
@@ -31,13 +34,23 @@ struct GeneralSettings: View {
                 if AppFeature.keepAwake.isAvailable {
                     shortcutCard
                 }
+                dictationCard
                 feedbackCard
             }
             .frame(maxWidth: 760)
             .frame(maxWidth: .infinity)
             .padding(22)
         }
-        .onAppear { refreshLaunchAtLogin() }
+        .onAppear {
+            refreshLaunchAtLogin()
+            systemDictationOn = DictationService.isSystemDictationOn
+        }
+        // Dictation is switched on in System Settings, so look again whenever
+        // the person comes back from there.
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.didBecomeActiveNotification)) { _ in
+            systemDictationOn = DictationService.isSystemDictationOn
+        }
         .onReceive(NotificationCenter.default.publisher(
             for: LaunchAtLoginSupport.settingsRefreshRequested)) { _ in
             refreshLaunchAtLogin()
@@ -141,6 +154,35 @@ struct GeneralSettings: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .padding(.leading, settingsRowTextInset)
+            }
+        }
+    }
+
+    /// The switch, how it works, and a warning while macOS Dictation is off,
+    /// since speech recognition refuses to run without it.
+    private var dictationCard: some View {
+        SettingsCard(title: dictationStrings.pageTitle) {
+            SettingsRow(symbol: "waveform", title: dictationStrings.enable,
+                        caption: dictationStrings.enableCaption) {
+                Toggle(dictationStrings.enable, isOn: $dictationEnabled)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .onChange(of: dictationEnabled) { _, _ in
+                        DictationService.shared.syncWithPreferences()
+                    }
+            }
+            if dictationEnabled, !systemDictationOn {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(dictationStrings.systemDictationOff, systemImage: "exclamationmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(dictationStrings.openKeyboardSettings) {
+                        DictationService.openKeyboardSettings()
+                    }
+                    .controlSize(.small)
+                }
+                .padding(.leading, settingsRowTextInset)
             }
         }
     }

@@ -15,7 +15,7 @@ import Speech
 /// Recognition, macOS Dictation switched on, and Accessibility (for the key
 /// tap and the synthesized ⌘V).
 ///
-/// Off switch: `defaults write <bundle id> dictationEnabled -bool false`.
+/// Switched on and off from the Dictation section of the Tools settings page.
 final class DictationService {
     static let shared = DictationService()
 
@@ -54,6 +54,20 @@ final class DictationService {
 
     private init() {
         UserDefaults.standard.register(defaults: [Self.enabledKey: true])
+    }
+
+    /// Whether macOS Dictation is on. The Speech framework refuses to run
+    /// while it is off (kLSRErrorDomain 201), so Settings warns about it.
+    /// The preference is absent until Dictation is first turned on.
+    static var isSystemDictationOn: Bool {
+        CFPreferencesCopyAppValue("Dictation Enabled" as CFString,
+                                  "com.apple.assistant.support" as CFString) as? Bool ?? false
+    }
+
+    static func openKeyboardSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     /// Reinstalls the key tap too: one created before Accessibility was
@@ -302,13 +316,12 @@ final class DictationService {
         let nsError = error as NSError
         // kLSRErrorDomain 201: the Speech framework refuses to run while macOS
         // Dictation is off, even though Apple's own dictation key is not used.
+        let strings = FeatureStrings.dictation(L10n.shared.language)
         if nsError.domain == "kLSRErrorDomain", nsError.code == 201 {
-            hud.flash("Turn on Dictation in Settings")
-            if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
-                NSWorkspace.shared.open(url)
-            }
+            hud.flash(strings.turnOnSystemDictation)
+            Self.openKeyboardSettings()
         } else {
-            hud.flash("Dictation failed")
+            hud.flash(strings.failed)
         }
     }
 
@@ -408,14 +421,21 @@ private final class DictationHUD {
     private var hideWork: DispatchWorkItem?
 
     func show(_ phase: Phase) {
-        let panel = preparePanel(width: Self.standardWidth)
+        // Built first so the label carries its font when it is measured.
+        if panel == nil { panel = makePanel() }
+        let strings = FeatureStrings.dictation(L10n.shared.language)
+        switch phase {
+        case .listening: label.stringValue = strings.listening
+        case .transcribing: label.stringValue = strings.transcribing
+        }
+        // Some languages run longer than the English badge.
+        let width = max(Self.standardWidth, label.attributedStringValue.size().width + 56)
+        let panel = preparePanel(width: width)
         switch phase {
         case .listening:
-            label.stringValue = "Listening…"
             setColor(.systemRed)
             startPulse()
         case .transcribing:
-            label.stringValue = "Transcribing…"
             setColor(.systemGray)
             startBreathing()
         }
@@ -443,6 +463,7 @@ private final class DictationHUD {
 
     /// Shows a short message for a few seconds, then hides itself.
     func flash(_ message: String) {
+        if panel == nil { panel = makePanel() }
         label.stringValue = message
         let width = max(Self.standardWidth, label.attributedStringValue.size().width + 56)
         let panel = preparePanel(width: width)

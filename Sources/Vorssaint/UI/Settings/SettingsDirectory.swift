@@ -177,7 +177,9 @@ enum SettingsDirectory {
                 SettingsDirectoryItem(page: .general, title: s.tabGeneral, icon: "gearshape",
                                        keywords: [s.launchAtLogin, s.languageLabel,
                                                   FeatureStrings.appearance(language).label,
-                                                  FeatureStrings.appearance(language).dark],
+                                                  FeatureStrings.appearance(language).dark,
+                                                  FeatureStrings.dictation(language).pageTitle,
+                                                  FeatureStrings.dictation(language).enable],
                                        featureKeywords: [
                                         (.musicBlock, [s.musicBlockTitle, s.musicBlockSection]),
                                        ]),
